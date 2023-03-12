@@ -98,4 +98,12 @@ if __name__ == "__main__":
     validation_data=(x_val, y_val),
 )
 
+plt.plot(history.history["loss"])
+plt.plot(history.history["val_loss"])
+plt.title("model loss")
+plt.ylabel("loss")
+plt.xlabel("epoch")
+plt.legend(["train", "test"], loc="upper left")
+plt.show()
+
 
