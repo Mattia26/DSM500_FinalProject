@@ -1,129 +1,89 @@
-from tensorflow import keras
-import tensorflow as tf
-import numpy as np
-from embedder.RecommenderNet import RecommenderNet
-from preprocessor.MovieLensProcessor import MovieLensProcessor
+from preprocessor.Processor import Processor
 from evaluator.Evaluator import Evaluator
 from predictor.Predictor import Predictor
-from predictor.KNeighborsPredictor import KNeighborsPredictor
+from utils.utils import get_trained_models, array2csv, rand_pred
 import datetime
 import time
-EMBEDDING_SIZE = 50
+import os
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
+#embedding size for users and items
+EMBEDDING_SIZE = 50
+#k evaluation
+K = 50
+#"yelp":"Dataset/yelp.csv"
+#list of dataset for experiments
+DATASETS = {"Amazon":"Dataset/amazon_books.csv", "Movielens":"Dataset/movielens.csv", "yelp":"Dataset/yelp.csv"}
+#set to true if you want to retrain the models
+TRAIN = False
 
 
 if __name__ == "__main__":
 
-    processor = MovieLensProcessor("Dataset/amazon_books_100k/amazon_books.csv", 0.9)
-    
-    x_train, x_val, x_hold, y_train, y_val, y_hold, num_movies, num_users = processor.getData()
-    #y = RecommenderNet(30000,30000,5, [1,2,3,4,5,6,7,8,9,10])(x_val[:10])
-
-    #h_val = np.random.rand(len(y_val))
-    #eval = Evaluator(x_hold, h_val, y_hold, 20)
-    #print(eval.evaluate())
-    if False :
-        model_dot = RecommenderNet(num_users, num_movies, EMBEDDING_SIZE, y_train, dot=True)
+    for dataset in list(DATASETS.keys()):
+        print("Evaluation on {} dataset".format(dataset) )
+        processor = Processor(DATASETS.get(dataset), 0.9)
         
-        model_dot.compile(
-            loss=tf.keras.losses.BinaryCrossentropy(),
-            optimizer=keras.optimizers.Adam(learning_rate=0.001),
-            run_eagerly=True
-        ) 
-        history = model_dot.fit(
-            x=x_train,
-            y=y_train,
-            batch_size=128,
-            epochs=5,
-            verbose=1,
-            validation_data=(x_val, y_val)
-        )
-
-        model_dot.save("embedder/saved_dot")
-
-        model_nn = RecommenderNet(num_users, num_movies, EMBEDDING_SIZE, y_train, dot=False)
+        #split current dataset
+        x_train, x_val, x_hold, y_train, y_val, y_hold, num_items, num_users = processor.getData()
         
-        model_nn.compile(
-            loss=tf.keras.losses.BinaryCrossentropy(),
-            optimizer=keras.optimizers.Adam(learning_rate=0.001),
-            run_eagerly=True
-        ) 
-        history = model_nn.fit(
-            x=x_train,
-            y=y_train,
-            batch_size=128,
-            epochs=5,
-            verbose=1,
-            validation_data=(x_val, y_val)
-        )
+        #retrieve the nerual networks
+        model_dot, model_nn = get_trained_models(num_users, num_items, x_train, y_train, x_val, y_val, EMBEDDING_SIZE, TRAIN, dataset)
 
-        model_nn.save("embedder/saved_nn")
-    if True:
-        model_dot = keras.models.load_model('embedder/saved_dot')
-        model_nn = keras.models.load_model('embedder/saved_nn')
-    def rand_pred(x):
-        return np.random.rand(len(x))
-    with open('results', 'a') as r:
-        r.write('\n\n')
-        r.write(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H:%M:%S - '))
-        r.write('\n')
+        #Run experiments
+        with open('results.csv', 'a') as r:
+            if os.stat('results.csv').st_size == 0:
+                r.write('timestamp,dataset,model,k,accuracy,ndcg\n')
+            timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H:%M:%S - ')
 
-        predict = rand_pred
-        eval = Evaluator(x_hold, y_hold, 20, predict)
-        r.write('--- random ---')
-        r.write(str(eval.evaluate()))
-        r.write('\n')
-        print(str(eval.evaluate()))
+            predict = rand_pred
+            eval = Evaluator(x_hold, y_hold, K, predict)
+            results = eval.evaluate()
+            r.write(array2csv([timestamp, dataset, 'random', K, results[0], results[1]]))
 
-        predict = model_dot.predict
-        eval = Evaluator(x_hold, y_hold, 20, predict)
-        r.write('--- dot product ---')
-        r.write(str(eval.evaluate()))
-        r.write('\n')
+            predict = model_dot.predict
+            eval = Evaluator(x_hold, y_hold, K, predict)
+            results = eval.evaluate()
+            r.write(array2csv([timestamp, dataset, 'emb_dot', K, results[0], results[1]]))
 
-        predict = model_nn.predict
-        eval = Evaluator(x_hold, y_hold, 20, predict)
-        r.write('--- nn ---')
-        r.write(str(eval.evaluate()))
-        r.write('\n')
+            predict = model_nn.predict
+            eval = Evaluator(x_hold, y_hold, K, predict)
+            results = eval.evaluate()
+            r.write(array2csv([timestamp, dataset, 'emb_nn', K, results[0], results[1]]))
 
-        predictor = Predictor(model_dot, 'RANDOM_FOREST')
-        predictor.fit(x_train, y_train)
-        predict = predictor.predict
+            predictor = Predictor(model_dot, 'RANDOM_FOREST')
+            predictor.fit(x_train, y_train)
+            predict = predictor.predict
+            eval = Evaluator(x_hold, y_hold, K, predict)
+            results = eval.evaluate()
+            r.write(array2csv([timestamp, dataset, 'emb_dot_random_forest', K, results[0], results[1]]))
 
-        eval = Evaluator(x_hold, y_hold, 20, predict)
-        r.write('--- random forest - dot emb ---')
-        r.write(str(eval.evaluate()))
-        r.write('\n')
+            predictor = Predictor(model_dot, 'KNEIGH')
+            predictor.fit(x_train, y_train)
+            predict = predictor.predict
 
-        predictor = Predictor(model_dot, 'KNEIGH')
-        predictor.fit(x_train, y_train)
-        predict = predictor.predict
+            eval = Evaluator(x_hold, y_hold, K, predict)
+            results = eval.evaluate()
+            r.write(array2csv([timestamp, dataset, 'emb_dot_kneighbors', K, results[0], results[1]]))
 
-        eval = Evaluator(x_hold, y_hold, 20, predict)
-        r.write('--- kneigh - dot emb ---')
-        r.write(str(eval.evaluate()))
-        r.write('\n')
+            predictor = Predictor(model_nn, 'RANDOM_FOREST')
+            predictor.fit(x_train, y_train)
+            predict = predictor.predict
 
-        predictor = Predictor(model_nn, 'RANDOM_FOREST')
-        predictor.fit(x_train, y_train)
-        predict = predictor.predict
+            eval = Evaluator(x_hold, y_hold, K, predict)
+            results = eval.evaluate()
+            r.write(array2csv([timestamp, dataset, 'emb_nn_random_forest', K, results[0], results[1]]))
 
-        eval = Evaluator(x_hold, y_hold, 20, predict)
-        r.write('--- random forest - net emb ---')
-        r.write(str(eval.evaluate()))
-        r.write('\n')
+            predictor = Predictor(model_nn, 'KNEIGH')
+            predictor.fit(x_train, y_train)
+            predict = predictor.predict
 
-        predictor = Predictor(model_nn, 'KNEIGH')
-        predictor.fit(x_train, y_train)
-        predict = predictor.predict
-
-        eval = Evaluator(x_hold, y_hold, 20, predict)
-        r.write('--- kneigh - net emb ---')
-        r.write(str(eval.evaluate()))
-        r.write('\n')
+            eval = Evaluator(x_hold, y_hold, K, predict)
+            results = eval.evaluate()
+            r.write(array2csv([timestamp, dataset, 'emb_nn_kneighbors', K, results[0], results[1]]))
 
 
- 
+
+
 
     
