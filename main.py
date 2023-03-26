@@ -1,7 +1,7 @@
 from preprocessor.Processor import Processor
 from evaluator.Evaluator import Evaluator
 from predictor.Predictor import Predictor
-from utils.utils import get_trained_models, array2csv, rand_pred
+from utils.utils import get_trained_models, array2csv
 import datetime
 import time
 import os
@@ -35,11 +35,6 @@ if __name__ == "__main__":
             if os.stat('results.csv').st_size == 0:
                 r.write('timestamp,dataset,model,k,accuracy,ndcg\n')
             timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H:%M:%S - ')
-
-            predict = rand_pred
-            eval = Evaluator(x_hold, y_hold, K, predict)
-            results = eval.evaluate()
-            r.write(array2csv([timestamp, dataset, 'random', K, results[0], results[1]]))
 
             predict = model_dot.predict
             eval = Evaluator(x_hold, y_hold, K, predict)

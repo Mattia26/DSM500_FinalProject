@@ -21,18 +21,18 @@ class Evaluator():
 
     def evaluate(self):
         """
-         Evaluate movies and return recall NDCG and FWHM. This is a method to use when you want to perform evaluation on a list of users.
+         Evaluate items and return recall NDCG and Recall. This is a method to use when you want to perform evaluation on a list of users.
          
          
          @return a list of recall and NDCG values. Each value is a numpy array with shape [ num_users num_recall ]
         """
         user_list = set([x[0] for x in self.x_val])
-        top_50_items = [x[0] for x in Counter(self.x_val[:,1]).most_common(50)]
+        top_100_items = [x[0] for x in Counter(self.x_val[:,1]).most_common(100)]
 
         x_all = np.array([])
         # calculate the values to predict, for performance reasons only the top 50 items
         for u in tqdm(user_list):
-            for m in top_50_items[0:50]:
+            for m in top_100_items[0:100]:
                 if len(x_all) == 0:
                     x_all = [u,m]
                 else:
